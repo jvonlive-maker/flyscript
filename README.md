@@ -4,4 +4,4 @@ Controls -
 H - Fly Idle,
 Space (once in fly idle) - boost,
 Space + C - Land mode,
-Space + V - Super sonic mode
+Space + V - Super sonic mode,
