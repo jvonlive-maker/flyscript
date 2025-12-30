@@ -28,7 +28,7 @@ local PITCH_ANGLE = 10
 -- ASSET IDS
 local ANIM_IDLE_ID = "rbxassetid://93326430026112" 
 local ANIM_FLY_ID = "rbxassetid://140568359164725"  
-local ANIM_LAND_ID = "rbxassetid://YOUR_LANDING_ANIM_ID" 
+local ANIM_LAND_ID = "rbxassetid://112472797825991" 
 local BOOM_SOUND_ID = "rbxassetid://9120769331" 
 local WIND_SOUND_ID = "rbxassetid://93035214379043" 
 
