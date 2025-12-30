@@ -15,11 +15,13 @@ local SPEED_BOOST = 100
 local SPEED_GMODE = 200 
 local SPEED_WARP = 1000 
 local MAX_IDLE_SPEED = 40
-local ACCEL_SPEED = 0.08 -- Slightly faster acceleration for better "feel"
+local ACCEL_SPEED = 0.06 
 
 local FOV_NORMAL = 70
-local FOV_MAX = 110 
-local ROTATION_RESPONSIVENESS = 15 
+local FOV_MAX = 115 
+local ROTATION_RESPONSIVENESS = 15 -- Lowered for that "slow/smooth" feel
+local BANK_ANGLE = 35 -- How much you tilt when turning
+local PITCH_ANGLE = 15 -- How much you tilt when going up/down
 
 -- ASSET IDS
 local ANIM_IDLE_ID = "rbxassetid://93326430026112" 
@@ -41,11 +43,11 @@ local isFlying = false
 local isBoosting = false
 local isLanding = false 
 local currentSpeed = 0 
+local currentBank = 0 -- For smooth tilting
 local loadedIdleAnim, loadedFlyAnim, loadedLandAnim, loadedDescendAnim
 local boomSound, windSound
 local speedGui, speedLabel, idleSpeedBox
 
--- Optimized Raycast Params
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -63,7 +65,6 @@ local function setupUI()
 	speedLabel.Position = UDim2.new(0.5, -100, 0.85, 0)
 	speedLabel.BackgroundTransparency = 1
 	speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	speedLabel.TextStrokeTransparency = 0.5
 	speedLabel.Font = Enum.Font.GothamBold
 	speedLabel.TextSize = 22
 	speedLabel.Parent = speedGui
@@ -76,22 +77,12 @@ local function setupUI()
 	controlFrame.Parent = speedGui
 	Instance.new("UICorner", controlFrame)
 
-	local label = Instance.new("TextLabel")
-	label.Text = "IDLE SPEED"
-	label.Size = UDim2.new(1, 0, 0, 25)
-	label.TextColor3 = Color3.fromRGB(200, 200, 200)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.Gotham
-	label.TextSize = 10
-	label.Parent = controlFrame
-
 	idleSpeedBox = Instance.new("TextBox")
 	idleSpeedBox.Size = UDim2.new(0.8, 0, 0, 25)
 	idleSpeedBox.Position = UDim2.new(0.1, 0, 0.45, 0)
 	idleSpeedBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 	idleSpeedBox.TextColor3 = Color3.fromRGB(0, 255, 150)
 	idleSpeedBox.Text = tostring(SPEED_BASE)
-	idleSpeedBox.ClearTextOnFocus = true
 	idleSpeedBox.Font = Enum.Font.GothamBold
 	idleSpeedBox.Parent = controlFrame
 
@@ -106,7 +97,7 @@ end
 
 local function setupAssets()
 	local animator = humanoid:FindFirstChild("Animator") or humanoid:WaitForChild("Animator")
-	
+
 	local function load(id, prio)
 		local a = Instance.new("Animation")
 		a.AnimationId = id
@@ -123,7 +114,7 @@ local function setupAssets()
 	boomSound = Instance.new("Sound", rootPart)
 	boomSound.SoundId = BOOM_SOUND_ID
 	boomSound.Volume = 0.5
-	
+
 	windSound = Instance.new("Sound", rootPart)
 	windSound.SoundId = WIND_SOUND_ID
 	windSound.Looped = true
@@ -140,21 +131,23 @@ local function toggleFlight(forceOff)
 
 	if isFlying then
 		humanoid.PlatformStand = true
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 		windSound:Play()
-		
+
 		local attachment = Instance.new("Attachment", rootPart)
 		attachment.Name = "FlyAttachment"
 
 		local lv = Instance.new("LinearVelocity", rootPart)
 		lv.Name = "FlyVelocity"
 		lv.Attachment0 = attachment
-		lv.MaxForce = math.huge
+		lv.MaxForce = 9999999
 
 		local ao = Instance.new("AlignOrientation", rootPart)
 		ao.Name = "FlyGyro"
 		ao.Attachment0 = attachment
 		ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
 		ao.Responsiveness = ROTATION_RESPONSIVENESS
+		ao.MaxTorque = 9999999
 
 		loadedIdleAnim:Play(0.3)
 	else
@@ -162,13 +155,12 @@ local function toggleFlight(forceOff)
 		if rootPart:FindFirstChild("FlyVelocity") then rootPart.FlyVelocity:Destroy() end
 		if rootPart:FindFirstChild("FlyGyro") then rootPart.FlyGyro:Destroy() end
 		if rootPart:FindFirstChild("FlyAttachment") then rootPart.FlyAttachment:Destroy() end
-		
+
 		humanoid.PlatformStand = false
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 		loadedIdleAnim:Stop()
 		loadedFlyAnim:Stop()
 		loadedDescendAnim:Stop()
-		
-		-- Smoothly reset orientation to upright
 		rootPart.CFrame = CFrame.new(rootPart.Position) * CFrame.Angles(0, math.rad(rootPart.Orientation.Y), 0)
 	end
 end
@@ -204,12 +196,12 @@ RunService.RenderStepped:Connect(function(dt)
 
 	local moveVector = Vector3.zero
 	local camCFrame = camera.CFrame
+	local targetBank = 0
 
-	-- Input Detection
 	if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector += camCFrame.LookVector end
 	if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector -= camCFrame.LookVector end
-	if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector -= camCFrame.RightVector end
-	if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector += camCFrame.RightVector end
+	if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector -= camCFrame.RightVector targetBank += 1 end
+	if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector += camCFrame.RightVector targetBank -= 1 end
 	if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveVector += Vector3.new(0, 1, 0) end
 	if UserInputService:IsKeyDown(DOWN_KEY) then moveVector -= Vector3.new(0, 1, 0) end
 
@@ -218,7 +210,6 @@ RunService.RenderStepped:Connect(function(dt)
 	local isGMode = isBoosting and UserInputService:IsKeyDown(G_KEY)
 	local isWarping = isBoosting and UserInputService:IsKeyDown(WARP_KEY)
 
-	-- Speed Calculation
 	local targetSpeed = 0
 	if isMoving then
 		if isBoosting then
@@ -232,14 +223,16 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 
 	currentSpeed = currentSpeed + (targetSpeed - currentSpeed) * ACCEL_SPEED
+	currentBank = currentBank + (targetBank - currentBank) * 0.1 -- Smooth banking transition
+
 	lv.VectorVelocity = moveVector * currentSpeed
-	
-	-- Sound and FOV Scaling
-	windSound.Volume = math.clamp(currentSpeed / 200, 0, 1)
-	camera.FieldOfView = FOV_NORMAL + ((FOV_MAX - FOV_NORMAL) * (currentSpeed / SPEED_WARP))
-	
-	-- Orientation
-	ao.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + camCFrame.LookVector)
+
+	-- CALCULATE ROTATION WITH BANKING AND PITCH
+	local bankAngle = math.rad(currentBank * BANK_ANGLE)
+	local pitchAngle = math.rad(-(currentSpeed / SPEED_WARP) * PITCH_ANGLE)
+
+	local targetRotation = CFrame.lookAt(rootPart.Position, rootPart.Position + camCFrame.LookVector)
+	ao.CFrame = targetRotation * CFrame.Angles(pitchAngle, 0, bankAngle)
 
 	-- LANDING CHECK
 	local groundRay = workspace:Raycast(rootPart.Position, Vector3.new(0, -8, 0), rayParams)
@@ -247,7 +240,7 @@ RunService.RenderStepped:Connect(function(dt)
 		isLanding = true
 		toggleFlight(true) 
 		loadedLandAnim:Play()
-		task.delay(1.2, function() 
+		task.delay(3, function() 
 			loadedLandAnim:Stop(0.5) 
 			isLanding = false 
 		end)
@@ -263,17 +256,10 @@ RunService.RenderStepped:Connect(function(dt)
 		end
 	else
 		if loadedDescendAnim.IsPlaying then loadedDescendAnim:Stop(0.2) end
-
 		if isMoving and isBoosting then
-			if not loadedFlyAnim.IsPlaying then 
-				loadedIdleAnim:Stop(0.4) 
-				loadedFlyAnim:Play(0.4) 
-			end
+			if not loadedFlyAnim.IsPlaying then loadedIdleAnim:Stop(0.4) loadedFlyAnim:Play(0.4) end
 		else
-			if not loadedIdleAnim.IsPlaying then 
-				loadedFlyAnim:Stop(0.4) 
-				loadedIdleAnim:Play(0.4) 
-			end
+			if not loadedIdleAnim.IsPlaying then loadedFlyAnim:Stop(0.4) loadedIdleAnim:Play(0.4) end
 		end
 	end
 
