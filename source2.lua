@@ -23,13 +23,17 @@ local ROTATION_RESPONSIVENESS = 15
 local BANK_ANGLE = 35 
 local PITCH_ANGLE = 15 
 
--- ASSET IDS
+-- ASSET IDS (Replace with your IDs)
 local ANIM_IDLE_ID = "rbxassetid://93326430026112" 
 local ANIM_FLY_ID = "rbxassetid://93681287985936"  
 local ANIM_DESCEND_ID = "rbxassetid://78487249533001" 
+local ANIM_ASCEND_ID = "rbxassetid://114871503457855" -- <--- ADD YOUR ID HERE
 local ANIM_LAND_ID = "rbxassetid://112472797825991" 
 local BOOM_SOUND_ID = "rbxassetid://9120769331" 
 local WIND_SOUND_ID = "rbxassetid://93035214379043" 
+
+local SHIRT_ID = "rbxassetid://86956423395949" -- <--- ADD YOUR ID HERE
+local PANTS_ID = "rbxassetid://130491833787584" -- <--- ADD YOUR ID HERE
 
 -- KEYS
 local TOGGLE_KEY = Enum.KeyCode.H
@@ -37,6 +41,7 @@ local BOOST_KEY = Enum.KeyCode.Space
 local G_KEY = Enum.KeyCode.C         
 local WARP_KEY = Enum.KeyCode.V      
 local DOWN_KEY = Enum.KeyCode.Q
+local UP_KEY = Enum.KeyCode.E
 local FREELOOK_KEY = Enum.KeyCode.RightAlt 
 ----------------------------------------------------------
 
@@ -47,12 +52,24 @@ local isFreeLooking = false
 local currentSpeed = 0 
 local currentBank = 0 
 
-local loadedIdleAnim, loadedFlyAnim, loadedLandAnim, loadedDescendAnim
+local loadedIdleAnim, loadedFlyAnim, loadedLandAnim, loadedDescendAnim, loadedAscendAnim
 local boomSound, windSound
 local speedGui, speedLabel, idleSpeedBox
 
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+-- Appearance Function
+local function updateAppearance()
+	local shirt = character:FindFirstChildOfClass("Shirt") or Instance.new("Shirt", character)
+	local pants = character:FindFirstChildOfClass("Pants") or Instance.new("Pants", character)
+
+	shirt.ShirtTemplate = SHIRT_ID
+	shirt.Color3 = Color3.fromRGB(255, 255, 255) -- Set to White
+
+	pants.PantsTemplate = PANTS_ID
+	pants.Color3 = Color3.fromRGB(255, 255, 255) -- Set to White
+end
 
 local function setupUI()
 	local existing = player.PlayerGui:FindFirstChild("FlyStats")
@@ -112,6 +129,7 @@ local function setupAssets()
 	loadedIdleAnim = load(ANIM_IDLE_ID, Enum.AnimationPriority.Action)
 	loadedFlyAnim = load(ANIM_FLY_ID, Enum.AnimationPriority.Action)
 	loadedDescendAnim = load(ANIM_DESCEND_ID, Enum.AnimationPriority.Action2)
+	loadedAscendAnim = load(ANIM_ASCEND_ID, Enum.AnimationPriority.Action2)
 	loadedLandAnim = load(ANIM_LAND_ID, Enum.AnimationPriority.Action4)
 
 	boomSound = Instance.new("Sound", rootPart)
@@ -134,6 +152,7 @@ local function toggleFlight(forceOff)
 	rayParams.FilterDescendantsInstances = {character}
 
 	if isFlying then
+		updateAppearance()
 		humanoid.PlatformStand = true
 		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 		windSound:Play()
@@ -166,6 +185,7 @@ local function toggleFlight(forceOff)
 		loadedIdleAnim:Stop()
 		loadedFlyAnim:Stop()
 		loadedDescendAnim:Stop()
+		loadedAscendAnim:Stop()
 		rootPart.CFrame = CFrame.new(rootPart.Position) * CFrame.Angles(0, math.rad(rootPart.Orientation.Y), 0)
 	end
 end
@@ -210,10 +230,11 @@ RunService.RenderStepped:Connect(function(dt)
 	if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector -= camCFrame.LookVector end
 	if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector -= camCFrame.RightVector targetBank += 1 end
 	if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector += camCFrame.RightVector targetBank -= 1 end
-	if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveVector += Vector3.new(0, 1, 0) end
-	if UserInputService:IsKeyDown(DOWN_KEY) then moveVector -= Vector3.new(0, 1, 0) end
+	if UserInputService:IsKeyDown(UP_KEY) then moveVector += Vector3.new(0, 1, 0) end
+	if UserInputService:IsKeyDown(DOWN_KEY) then moveVector += Vector3.new(0, -1, 0) end -- FIXED: Now moves Down
 
 	local isMoving = moveVector.Magnitude > 0
+	local isAscending = UserInputService:IsKeyDown(UP_KEY)
 	local isDescending = UserInputService:IsKeyDown(DOWN_KEY)
 	local isGMode = isBoosting and UserInputService:IsKeyDown(G_KEY)
 	local isWarping = isBoosting and UserInputService:IsKeyDown(WARP_KEY)
@@ -224,7 +245,7 @@ RunService.RenderStepped:Connect(function(dt)
 		if isBoosting then
 			if isWarping then targetSpeed = SPEED_WARP
 			elseif isGMode then targetSpeed = SPEED_GMODE
-			else targetSpeed = SPEED_BOOST end
+			else targetSpeed = SPEED_BOOST end -- Handles Space + E at 100 Speed
 		else
 			targetSpeed = SPEED_BASE
 		end
@@ -236,7 +257,7 @@ RunService.RenderStepped:Connect(function(dt)
 
 	lv.VectorVelocity = moveVector * currentSpeed
 
-	-- FOV CHANGE LOGIC
+	-- FOV CHANGE LOGIC (Based on Speed)
 	local fovPercent = math.clamp(currentSpeed / SPEED_WARP, 0, 1)
 	camera.FieldOfView = FOV_NORMAL + ((FOV_MAX - FOV_NORMAL) * fovPercent)
 
@@ -270,14 +291,23 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 
 	-- Animation Controller
-	if isDescending and not isBoosting then
+	if isAscending and isBoosting then
+		if not loadedAscendAnim.IsPlaying then
+			loadedIdleAnim:Stop(0.2)
+			loadedFlyAnim:Stop(0.2)
+			loadedDescendAnim:Stop(0.2)
+			loadedAscendAnim:Play(0.2)
+		end
+	elseif isDescending and not isBoosting then
 		if not loadedDescendAnim.IsPlaying then
 			loadedIdleAnim:Stop(0.2)
 			loadedFlyAnim:Stop(0.2)
+			loadedAscendAnim:Stop(0.2)
 			loadedDescendAnim:Play(0.2)
 		end
 	else
 		if loadedDescendAnim.IsPlaying then loadedDescendAnim:Stop(0.2) end
+		if loadedAscendAnim.IsPlaying then loadedAscendAnim:Stop(0.2) end
 		if isMoving and isBoosting then
 			if not loadedFlyAnim.IsPlaying then loadedIdleAnim:Stop(0.4) loadedFlyAnim:Play(0.4) end
 		else
