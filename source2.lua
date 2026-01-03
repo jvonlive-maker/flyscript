@@ -39,7 +39,7 @@ local SETTINGS = {
 	},
 	IDS = {
 		IDLE = "rbxassetid://93326430026112", 
-		FLY = "rbxassetid://101291673584393",
+		FLY = "rbxassetid://93681287985936",
 		DESCEND = "rbxassetid://93326430026112",
 		ASCEND = "rbxassetid://93326430026112",
 		-- Audio
